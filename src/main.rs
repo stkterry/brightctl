@@ -121,12 +121,12 @@ fn main() {
 
     // If a device was specified, find the corresponding entry by comparing the directory name
     // otherwise return the first valid device
-    let device = if let Some(id) = args.device {
+    let device = if let Some(ref id) = args.device {
         classes.into_iter().find_map(|class| {
             path.join(class)
                 .read_dir().ok()?
                 .flatten()
-                .find(|entry| entry.file_name().as_os_str() == id)
+                .find(|entry| entry.file_name().as_os_str() == *id)
                 .and_then(|entry| read_device(class, entry).ok())
         })
     } else {
@@ -138,9 +138,30 @@ fn main() {
         })
     };
 
+    // Exit if no matching devices are found.
+    let device = match (args.device, device) {
+        (_, Some(d)) => d,
+        (None, _) => {
+            println!("Failed to find a suitable device.");
+            return;
+        },
+        (Some(id), _) => {
+            println!("Device '{}' not found.", id.to_str().unwrap());
+            return;
+        }
+    };
 
-    if let Some(dev) = device {
-        printfn(&dev);
+
+    let cmd = match args.command {
+        Some(cmd) => cmd,
+        None => return
+    };
+
+    match cmd {
+        Commands::Info => printfn(&device),
+        Commands::Get => println!("{}", device.brightness),
+        Commands::Max => println!("{}", device.max_brightness),
+        Commands::Set { value } => {},
     }
 
 }
