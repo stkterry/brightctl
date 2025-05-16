@@ -6,3 +6,11 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5", features = ["derive", "string"] }
 anyhow = "*"
+systemd = { version = "0.10", default-features = false, features = ["bus"] }
+
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "debuginfo"
+panic = "abort"
