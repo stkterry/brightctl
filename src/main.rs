@@ -74,9 +74,20 @@ enum Commands {
     Max,
 
     /// Set brightness for current device.
+    /// 
+    /// Adding '+' or '-' to the front will apply a delta change to the current brightness, 
+    /// excluding both will set a specific value.
+    /// Adding '%' to the end will apply the value as a percentage of the maximum brightness.
+    /// 
+    /// Examples:
+    /// brightctl set 30%
+    /// brightctl set -- -10%
+    /// brightctl set +20
+    #[command(verbatim_doc_comment)]
     Set { value: OsStr }
 }
 
+/// Device brightness control for systemd
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Arguments {
@@ -116,7 +127,6 @@ fn main() {
     let classes: Vec<&str> = args.class.iter()
         .map(|v| v.to_str().unwrap())
         .collect();
-
 
     if args.list {
 
