@@ -72,6 +72,7 @@ enum Commands {
     Get,
     /// Get maximum brightness of current device.
     Max,
+
     /// Set brightness for current device.
     Set { value: OsStr }
 }
@@ -93,8 +94,8 @@ struct Arguments {
     device: Option<OsStr>,
 
     /// Specify Class Name
-    #[arg(short, long)]
-    class: Option<OsStr>,
+    #[arg(short, long, default_values = vec!["backlight", "leds"])]
+    class: Vec<OsStr>,
 
     /// Commands
     #[command(subcommand)]
@@ -107,31 +108,29 @@ fn main() {
 
     let args = Arguments::parse();
 
-    let classes = match args.class {
-        Some(ref class) => vec![class.to_str().unwrap()],
-        None => vec!["backlight", "leds"]
-    };
-
     let printfn = match args.machine_readable {
         false => Device::print_human,
         true => Device::print_machine,
     };
 
+    let classes: Vec<&str> = args.class.iter()
+        .map(|v| v.to_str().unwrap())
+        .collect();
+
 
     if args.list {
 
-        let cnt: u16 = classes.into_iter().flat_map(|class| {
+        let cnt: u16 = classes.iter().flat_map(|class| {
             let k = path.join(class)
                 .read_dir().ok()?
                 .flat_map(|dev_path| map_device(class, dev_path?))
+                .inspect(printfn)
                 .count() as u16;
             Some(k)
         }).sum();
 
-        match (cnt == 0, args.class) {
-            (false, _)  => {},
-            (_, None) => println!("Failed to read any devices."),
-            (_, Some(ref class)) => println!("Failed to read any devices of class '{}'", class.to_str().unwrap()),
+        if cnt == 0 {
+            println!("Failed to read any devices in classes: {:?}", classes)
         }
 
         return
@@ -140,7 +139,7 @@ fn main() {
     // If a device was specified, find the corresponding entry by comparing the directory name
     // otherwise return the first valid device
     let device = if let Some(ref id) = args.device {
-        classes.into_iter().find_map(|class| {
+        classes.iter().find_map(|class| {
             path.join(class)
                 .read_dir().ok()?
                 .flatten()
@@ -148,7 +147,7 @@ fn main() {
                 .and_then(|dev_path| map_device(class, dev_path).ok())
         })
     } else {
-        classes.into_iter().find_map(|class| {
+        classes.iter().find_map(|class| {
             path.join(class)
                 .read_dir().ok()?
                 .flatten()
@@ -160,7 +159,7 @@ fn main() {
     let device = match (args.device, device) {
         (_, Some(d)) => d,
         (None, _) => {
-            println!("Failed to find a suitable device.");
+            println!("Failed to find a suitable device in classes: {:?}", classes);
             return;
         },
         (Some(ref id), _) => {
@@ -185,7 +184,10 @@ fn main() {
                 Err(err) => { println!("{err}"); return }
             }
         },
-    }}
+
+    }} else {
+        printfn(&device)
+    }
 
 }
 
