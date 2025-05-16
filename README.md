@@ -17,7 +17,7 @@ Well, technically it's a bit more performant. Here's a comparison using [hyperfi
 | `brightctl set 50%` | 2.6 ± 0.2 | 2.3 | 4.6 | 1.00 |
 | `brightnessctl set 50%` | 3.0 ± 0.2 | 2.7 | 4.9 | 1.15 ± 0.09 |
 
-The performance is otherwise identical when using the --list options in either, so results are simply omitted.
+The performance is otherwise identical when using the `--list` options in either, so results are simply omitted.
 
 ---
 
