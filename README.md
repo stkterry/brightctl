@@ -61,3 +61,9 @@ Options:
   -h, --help              Print help
   -V, --version           Print version
 ```
+
+State is saved/restore BEFORE `set` commands.  You need to run a `--save` call after if you want to save your change.
+For example:
+```
+$ brightctl set 50% ; brightctl -s
+```
