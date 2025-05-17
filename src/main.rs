@@ -1,8 +1,8 @@
 
 use std::{
     ffi::c_void, 
-    fs::{read_to_string, DirEntry}, 
-    path::Path
+    fs::{create_dir_all, read_to_string, write, DirEntry}, 
+    path::{Path, PathBuf}
 };
 
 use clap::{builder::OsStr, Parser, Subcommand};
@@ -32,6 +32,43 @@ struct Device<'a> {
 }
 
 impl <'a>Device<'a> {
+
+    #[inline]
+    fn restore(&mut self) -> Result<()> {
+
+        let path: PathBuf = [
+            "/tmp/brightctl/",
+            self.class,
+            self.id.file_name().to_str().unwrap(),
+        ].iter().collect();
+
+        let value = read_to_string(path)
+            .or_else(|err| Err(anyhow!("Error restoring device data: {err}")))?
+            .parse::<u32>().unwrap();
+
+        set_brightness(self, value)?;
+
+        self.brightness = value;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn save(&self) -> Result<()> {
+
+            let path: PathBuf = [
+                "/tmp/brightctl/", 
+                self.class
+            ].iter().collect();
+
+            create_dir_all(&path)
+                .or_else(|err| Err(anyhow!("Failed to save device state: {err}")))?;
+
+            write(path.join(self.id.file_name()), self.brightness.to_string())
+                .or_else(|err| Err(anyhow!("Failed to save device state: {err}")))?;
+
+        Ok(())
+    } 
 
     #[inline]
     fn print_human(device: &Self) {
@@ -75,9 +112,10 @@ enum Commands {
 
     /// Set brightness for current device.
     /// 
-    /// Adding '+' or '-' to the front will apply a delta change to the current brightness, 
-    /// excluding both will set a specific value.
-    /// Adding '%' to the end will apply the value as a percentage of the maximum brightness.
+    /// Adding '+' or '-' to the front will apply a delta change to the 
+    /// current brightness, excluding both will set a specific value.
+    /// Adding '%' to the end will apply the value as a percentage of 
+    /// the maximum brightness.
     /// 
     /// Examples:
     /// brightctl set 30%
@@ -99,6 +137,20 @@ struct Arguments {
     /// Produce machine-readable output.
     #[arg(short, long)]
     machine_readable: bool,
+
+    /// Save previous state to a temporary file.
+    /// 
+    /// State is saved BEFORE applying any 'set' command, meaning the 'set' value 
+    /// won't be stored unless you call this command separately.
+    #[arg(short, long, verbatim_doc_comment)]
+    save: bool,
+
+    /// Restore previously saved state.
+    /// 
+    /// State is restored BEFORE any 'set' command, meaning 'set' will 
+    /// operate on the restored state.
+    #[arg(short, long, verbatim_doc_comment)]
+    restore: bool,
 
     /// Specify Device Name
     #[arg(short, long)]
@@ -166,7 +218,7 @@ fn main() {
     };
 
     // Exit if no matching devices are found.
-    let device = match (args.device, device) {
+    let mut device = match (args.device, device) {
         (_, Some(d)) => d,
         (None, _) => {
             println!("Failed to find a suitable device in classes: {:?}", classes);
@@ -177,6 +229,20 @@ fn main() {
             return;
         }
     };
+
+    match (args.restore, args.save) {
+        (true, true) => {
+            println!("Cannot both save and restore state as part of the same operation.");
+            return;
+        },
+        (true, _) => {
+            if let Err(err) = device.restore() { println!("{err}") }
+        },
+        (_, true) => {
+            if let Err(err) = device.save() { println!("{err}" )}
+        },
+        _ => {},
+    }
 
     if let Some(cmd) = args.command { match cmd {
         Commands::Info => printfn(&device),
@@ -189,7 +255,7 @@ fn main() {
                 Err(err) => { println!("{err}"); return }
             };
 
-            match set_brightness(&device, &value) {
+            match set_brightness(&device, value.qty) {
                 Ok(_) => {},
                 Err(err) => { println!("{err}"); return }
             }
@@ -257,7 +323,7 @@ fn map_device(class: &str, dev_path: DirEntry) -> Result<Device> {
 
 
 #[inline]
-fn set_brightness(device: &Device, value: &Value) -> Result<()> {
+fn set_brightness(device: &Device, value: u32) -> Result<()> {
 
     let (dest, path, interface, member) = unsafe {(
         BusName::from_bytes_unchecked(b"org.freedesktop.login1\0"),
@@ -274,7 +340,7 @@ fn set_brightness(device: &Device, value: &Value) -> Result<()> {
         msg.append_basic_raw(115, device.class.to_owned().as_ptr() as *const c_void)?;
         msg.append_basic_raw(115, device.id.file_name().to_string_lossy().as_ptr() as *const c_void)?;
     };
-    msg.append(value.qty)?;
+    msg.append(value)?;
     
     let _ = msg.call(0);
      
